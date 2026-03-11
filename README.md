@@ -267,6 +267,10 @@ Benchmark suite includes:
 
 See [ROADMAP.md](ROADMAP.md).
 
+## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for setup, review expectations, and PR guidelines.
+
 ## Smoke-tested workflow
 
 The current build was validated locally with:
@@ -282,4 +286,4 @@ Created and maintained by Yan.
 
 ## License
 
-No license has been added yet.
+Licensed under [Apache-2.0](LICENSE).
