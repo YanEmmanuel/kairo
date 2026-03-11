@@ -1,0 +1,65 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    name: Publish ${{ matrix.rid }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            rid: linux-x64
+            extension: ""
+          - os: windows-latest
+            rid: win-x64
+            extension: ".exe"
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Publish single-file binary
+        id: publish
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          output_dir="artifacts/${{ matrix.rid }}"
+          release_dir="release"
+          asset_name="kairo-${{ matrix.rid }}${{ matrix.extension }}"
+
+          dotnet publish ./Kairo.Cli/Kairo.Cli.csproj \
+            -c Release \
+            -r "${{ matrix.rid }}" \
+            --self-contained true \
+            -p:PublishSingleFile=true \
+            -p:EnableCompressionInSingleFile=true \
+            -p:DebugType=None \
+            -p:DebugSymbols=false \
+            -p:PublishTrimmed=false \
+            -o "$output_dir"
+
+          mkdir -p "$release_dir"
+          mv "$output_dir/Kairo${{ matrix.extension }}" "$release_dir/$asset_name"
+
+          echo "asset_path=$release_dir/$asset_name" >> "$GITHUB_OUTPUT"
+
+      - name: Upload release asset
+        uses: softprops/action-gh-release@v2
+        with:
+          files: ${{ steps.publish.outputs.asset_path }}
+          fail_on_unmatched_files: true

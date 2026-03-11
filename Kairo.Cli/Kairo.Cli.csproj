@@ -1,0 +1,25 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <ItemGroup>
+    <ProjectReference Include="..\Kairo.Core\Kairo.Core.csproj" />
+    <ProjectReference Include="..\Kairo.Rendering\Kairo.Rendering.csproj" />
+    <ProjectReference Include="..\Kairo.Video\Kairo.Video.csproj" />
+    <ProjectReference Include="..\Kairo.Terminal\Kairo.Terminal.csproj" />
+  </ItemGroup>
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <AssemblyName>Kairo</AssemblyName>
+    <RootNamespace>Kairo</RootNamespace>
+    <PackageId>Kairo</PackageId>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <PackAsTool>true</PackAsTool>
+    <ToolCommandName>kairo</ToolCommandName>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <None Include="..\README.md" Pack="true" PackagePath="\" />
+  </ItemGroup>
+
+</Project>

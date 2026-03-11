@@ -1,0 +1,20 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <ItemGroup>
+    <ProjectReference Include="..\Kairo.Core\Kairo.Core.csproj" />
+    <ProjectReference Include="..\Kairo.Rendering\Kairo.Rendering.csproj" />
+    <ProjectReference Include="..\Kairo.Terminal\Kairo.Terminal.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="BenchmarkDotNet" Version="0.15.8" />
+  </ItemGroup>
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <Optimize>true</Optimize>
+    <NoWarn>$(NoWarn);CA1001</NoWarn>
+  </PropertyGroup>
+
+</Project>

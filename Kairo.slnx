@@ -1,0 +1,9 @@
+<Solution>
+  <Project Path="Kairo.Benchmarks/Kairo.Benchmarks.csproj" />
+  <Project Path="Kairo.Cli/Kairo.Cli.csproj" />
+  <Project Path="Kairo.Core/Kairo.Core.csproj" />
+  <Project Path="Kairo.Rendering/Kairo.Rendering.csproj" />
+  <Project Path="Kairo.Terminal/Kairo.Terminal.csproj" />
+  <Project Path="Kairo.Tests/Kairo.Tests.csproj" />
+  <Project Path="Kairo.Video/Kairo.Video.csproj" />
+</Solution>
