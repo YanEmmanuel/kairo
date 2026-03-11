@@ -1,4 +1,3 @@
-using System.ComponentModel;
 using System.Diagnostics;
 using Kairo.Core.Contracts;
 using Kairo.Core.Playback;
@@ -69,22 +68,22 @@ public sealed class YtDlpMediaInputResolver : IMediaInputResolver
 
         try
         {
-            var startInfo = new ProcessStartInfo
-            {
-                FileName = "yt-dlp",
-                Arguments = YtDlpArgumentBuilder.BuildDownload(input, _downloadDirectory),
-                RedirectStandardOutput = true,
-                RedirectStandardError = true,
-                UseShellExecute = false,
-                CreateNoWindow = true
-            };
+            var ffmpegLocation = ExternalToolLocator.ResolveOptional("ffmpeg") is { } ffmpegPath
+                ? Path.GetDirectoryName(ffmpegPath)
+                : null;
+            var denoPath = ExternalToolLocator.ResolveOptional("deno");
+            var startInfo = ExternalProcessStartInfoFactory.Create(
+                "yt-dlp",
+                YtDlpArgumentBuilder.BuildDownload(input, _downloadDirectory, ffmpegLocation, denoPath),
+                redirectStandardOutput: true,
+                redirectStandardError: true);
 
             process = Process.Start(startInfo) ?? throw new InvalidOperationException("Unable to start yt-dlp.");
         }
-        catch (Win32Exception exception)
+        catch (InvalidOperationException exception)
         {
             throw new InvalidOperationException(
-                "URL playback requires 'yt-dlp' in PATH. Install yt-dlp or download the file locally first.",
+                "URL playback requires the bundled 'yt-dlp' binary or a system 'yt-dlp' in PATH. Use the portable release bundle or download the file locally first.",
                 exception);
         }
 

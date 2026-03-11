@@ -68,8 +68,7 @@ public static class HelpText
           The default mode is auto and prefers truecolor block rendering.
           In blocks mode, detail quality and above enable denser 2x2 quadrant cells.
           Resize is tracked during playback when width or height is not fixed.
-          FFmpeg and ffprobe must be available in PATH.
-          URL playback requires yt-dlp in PATH.
-          Audio playback requires ffplay in PATH.
+          Portable release bundles ship with ffmpeg, ffprobe, ffplay, yt-dlp, and deno.
+          Raw binaries still fall back to system tools in PATH.
         """;
 }

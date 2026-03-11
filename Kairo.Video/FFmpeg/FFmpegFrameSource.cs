@@ -24,15 +24,11 @@ public sealed class FFmpegFrameSource : IFrameSource
 
         try
         {
-            var startInfo = new ProcessStartInfo
-            {
-                FileName = "ffmpeg",
-                Arguments = FFmpegArgumentBuilder.BuildDecode(request),
-                RedirectStandardOutput = true,
-                RedirectStandardError = true,
-                UseShellExecute = false,
-                CreateNoWindow = true
-            };
+            var startInfo = ExternalProcessStartInfoFactory.Create(
+                "ffmpeg",
+                FFmpegArgumentBuilder.BuildDecode(request),
+                redirectStandardOutput: true,
+                redirectStandardError: true);
 
             process = Process.Start(startInfo) ?? throw new InvalidOperationException("Unable to start ffmpeg.");
             stderrTask = process.StandardError.ReadToEndAsync(cancellationToken);

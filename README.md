@@ -94,10 +94,7 @@ Important implementation choices:
 ## Requirements
 
 - .NET SDK 10.0
-- `ffmpeg` in `PATH`
-- `ffprobe` in `PATH`
-- `yt-dlp` in `PATH` for URL inputs
-- `ffplay` in `PATH` for `--audio on`
+- `ffmpeg`, `ffprobe`, `yt-dlp`, `ffplay`, and `deno` only if you are running the raw binary or building from source
 
 This repository currently targets `net10.0` because that is the SDK available in the development environment used for this build.
 
@@ -109,12 +106,16 @@ dotnet build Kairo.slnx
 
 ## Releases
 
-Push a tag like `v0.1.0` and GitHub Actions will publish raw single-file binaries for:
+Push a tag like `v0.1.0` and GitHub Actions will publish:
 
-- `kairo-linux-x64`
-- `kairo-win-x64.exe`
+- raw single-file binaries:
+  - `kairo-linux-x64`
+  - `kairo-win-x64.exe`
+- portable plug-and-play bundles with embedded toolchain:
+  - `kairo-linux-x64-portable.tar.gz`
+  - `kairo-win-x64-portable.zip`
 
-The Windows asset is uploaded directly as `.exe` to the GitHub release, not wrapped in a zip archive.
+The portable bundles include `ffmpeg`, `ffprobe`, `ffplay`, `yt-dlp`, and `deno` so URL playback and audio work without any extra system installation after extraction.
 
 ## Run
 

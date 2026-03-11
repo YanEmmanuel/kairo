@@ -1,4 +1,3 @@
-using System.ComponentModel;
 using System.Diagnostics;
 using Kairo.Core.Contracts;
 using Kairo.Core.Playback;
@@ -13,22 +12,18 @@ public sealed class FFplayAudioPlayer : IAudioPlayer
 
         try
         {
-            var startInfo = new ProcessStartInfo
-            {
-                FileName = "ffplay",
-                Arguments = FFplayArgumentBuilder.BuildAudioPlayback(request),
-                RedirectStandardOutput = true,
-                RedirectStandardError = true,
-                UseShellExecute = false,
-                CreateNoWindow = true
-            };
+            var startInfo = ExternalProcessStartInfoFactory.Create(
+                "ffplay",
+                FFplayArgumentBuilder.BuildAudioPlayback(request),
+                redirectStandardOutput: true,
+                redirectStandardError: true);
 
             process = Process.Start(startInfo) ?? throw new InvalidOperationException("Unable to start ffplay.");
         }
-        catch (Win32Exception exception)
+        catch (InvalidOperationException exception)
         {
             throw new InvalidOperationException(
-                "Audio playback requires 'ffplay' in PATH. Install ffplay or run with '--audio off'.",
+                "Audio playback requires the bundled 'ffplay' binary or a system 'ffplay' in PATH. Use the portable release bundle or run with '--audio off'.",
                 exception);
         }
 

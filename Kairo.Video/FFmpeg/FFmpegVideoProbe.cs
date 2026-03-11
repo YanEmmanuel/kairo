@@ -10,15 +10,11 @@ public sealed class FFmpegVideoProbe : IVideoProbe
 {
     public async Task<VideoMetadata> ProbeAsync(string inputPath, CancellationToken cancellationToken)
     {
-        var startInfo = new ProcessStartInfo
-        {
-            FileName = "ffprobe",
-            Arguments = FFmpegArgumentBuilder.BuildProbe(inputPath),
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
-            UseShellExecute = false,
-            CreateNoWindow = true
-        };
+        var startInfo = ExternalProcessStartInfoFactory.Create(
+            "ffprobe",
+            FFmpegArgumentBuilder.BuildProbe(inputPath),
+            redirectStandardOutput: true,
+            redirectStandardError: true);
 
         using var process = Process.Start(startInfo) ?? throw new InvalidOperationException("Unable to start ffprobe.");
         using var registration = cancellationToken.Register(static state =>

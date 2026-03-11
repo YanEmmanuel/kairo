@@ -19,9 +19,19 @@ jobs:
           - os: ubuntu-latest
             rid: linux-x64
             extension: ""
+            raw_asset: kairo-linux-x64
+            portable_asset: kairo-linux-x64-portable.tar.gz
+            ffmpeg_url: https://github.com/yt-dlp/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-linux64-lgpl.tar.xz
+            yt_dlp_url: https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp_linux.zip
+            deno_url: https://github.com/denoland/deno/releases/latest/download/deno-x86_64-unknown-linux-gnu.zip
           - os: windows-latest
             rid: win-x64
             extension: ".exe"
+            raw_asset: kairo-win-x64.exe
+            portable_asset: kairo-win-x64-portable.zip
+            ffmpeg_url: https://github.com/yt-dlp/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-win64-lgpl.zip
+            yt_dlp_url: https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp.exe
+            deno_url: https://github.com/denoland/deno/releases/latest/download/deno-x86_64-pc-windows-msvc.zip
 
     steps:
       - name: Checkout
@@ -32,15 +42,14 @@ jobs:
         with:
           dotnet-version: 10.0.x
 
-      - name: Publish single-file binary
-        id: publish
+      - name: Publish single-file app
         shell: bash
         run: |
           set -euo pipefail
 
-          output_dir="artifacts/${{ matrix.rid }}"
+          publish_dir="artifacts/publish"
+          bundle_dir="artifacts/bundle/kairo"
           release_dir="release"
-          asset_name="kairo-${{ matrix.rid }}${{ matrix.extension }}"
 
           dotnet publish ./Kairo.Cli/Kairo.Cli.csproj \
             -c Release \
@@ -51,15 +60,84 @@ jobs:
             -p:DebugType=None \
             -p:DebugSymbols=false \
             -p:PublishTrimmed=false \
-            -o "$output_dir"
+            -o "$publish_dir"
 
-          mkdir -p "$release_dir"
-          mv "$output_dir/Kairo${{ matrix.extension }}" "$release_dir/$asset_name"
+          mkdir -p "$bundle_dir/tools" "$release_dir"
 
-          echo "asset_path=$release_dir/$asset_name" >> "$GITHUB_OUTPUT"
+          mv "$publish_dir/Kairo${{ matrix.extension }}" "$release_dir/${{ matrix.raw_asset }}"
+          cp "$release_dir/${{ matrix.raw_asset }}" "$bundle_dir/kairo${{ matrix.extension }}"
+          cp README.md LICENSE "$bundle_dir/"
 
-      - name: Upload release asset
+      - name: Bundle portable toolchain on Linux
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          tool_dir="artifacts/bundle/kairo/tools"
+          work_dir="artifacts/toolwork/linux"
+          mkdir -p "$tool_dir" "$work_dir"
+
+          curl -L "${{ matrix.ffmpeg_url }}" -o "$work_dir/ffmpeg.tar.xz"
+          tar -xf "$work_dir/ffmpeg.tar.xz" -C "$work_dir"
+          ffmpeg_root="$(find "$work_dir" -maxdepth 1 -type d -name 'ffmpeg-*' | head -n 1)"
+          cp "$ffmpeg_root/bin/ffmpeg" "$tool_dir/ffmpeg"
+          cp "$ffmpeg_root/bin/ffprobe" "$tool_dir/ffprobe"
+          cp "$ffmpeg_root/bin/ffplay" "$tool_dir/ffplay"
+
+          curl -L "${{ matrix.yt_dlp_url }}" -o "$work_dir/yt-dlp_linux.zip"
+          unzip -qo "$work_dir/yt-dlp_linux.zip" -d "$work_dir/yt-dlp"
+          yt_dlp_binary="$(find "$work_dir/yt-dlp" -type f \( -name 'yt-dlp' -o -name 'yt-dlp_linux' \) | head -n 1)"
+          cp "$yt_dlp_binary" "$tool_dir/yt-dlp"
+
+          curl -L "${{ matrix.deno_url }}" -o "$work_dir/deno.zip"
+          unzip -qo "$work_dir/deno.zip" -d "$work_dir/deno"
+          deno_binary="$(find "$work_dir/deno" -type f -name 'deno' | head -n 1)"
+          cp "$deno_binary" "$tool_dir/deno"
+
+          chmod +x "$tool_dir/"*
+
+      - name: Bundle portable toolchain on Windows
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $toolDir = "artifacts/bundle/kairo/tools"
+          $workDir = "artifacts/toolwork/windows"
+
+          New-Item -ItemType Directory -Force -Path $toolDir | Out-Null
+          New-Item -ItemType Directory -Force -Path $workDir | Out-Null
+
+          Invoke-WebRequest "${{ matrix.ffmpeg_url }}" -OutFile "$workDir/ffmpeg.zip"
+          Expand-Archive "$workDir/ffmpeg.zip" -DestinationPath "$workDir/ffmpeg" -Force
+          $ffmpegRoot = Get-ChildItem "$workDir/ffmpeg" -Directory | Select-Object -First 1
+          Copy-Item "$($ffmpegRoot.FullName)/bin/ffmpeg.exe" "$toolDir/ffmpeg.exe"
+          Copy-Item "$($ffmpegRoot.FullName)/bin/ffprobe.exe" "$toolDir/ffprobe.exe"
+          Copy-Item "$($ffmpegRoot.FullName)/bin/ffplay.exe" "$toolDir/ffplay.exe"
+
+          Invoke-WebRequest "${{ matrix.yt_dlp_url }}" -OutFile "$toolDir/yt-dlp.exe"
+
+          Invoke-WebRequest "${{ matrix.deno_url }}" -OutFile "$workDir/deno.zip"
+          Expand-Archive "$workDir/deno.zip" -DestinationPath "$workDir/deno" -Force
+          $denoBinary = Get-ChildItem "$workDir/deno" -Recurse -Filter "deno.exe" | Select-Object -First 1
+          Copy-Item $denoBinary.FullName "$toolDir/deno.exe"
+
+      - name: Create portable archive on Linux
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          set -euo pipefail
+          tar -czf "release/${{ matrix.portable_asset }}" -C artifacts/bundle kairo
+
+      - name: Create portable archive on Windows
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          Compress-Archive -Path "artifacts/bundle/kairo" -DestinationPath "release/${{ matrix.portable_asset }}" -Force
+
+      - name: Upload release assets
         uses: softprops/action-gh-release@v2
         with:
-          files: ${{ steps.publish.outputs.asset_path }}
+          files: |
+            release/${{ matrix.raw_asset }}
+            release/${{ matrix.portable_asset }}
           fail_on_unmatched_files: true
