@@ -21,7 +21,7 @@ jobs:
             extension: ""
             raw_asset: kairo-linux-x64
             portable_asset: kairo-linux-x64-portable.tar.gz
-            ffmpeg_url: https://github.com/yt-dlp/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-linux64-lgpl.tar.xz
+            ffmpeg_asset_name: ffmpeg-master-latest-linux64-gpl.tar.xz
             yt_dlp_url: https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp_linux.zip
             deno_url: https://github.com/denoland/deno/releases/latest/download/deno-x86_64-unknown-linux-gnu.zip
           - os: windows-latest
@@ -29,7 +29,7 @@ jobs:
             extension: ".exe"
             raw_asset: kairo-win-x64.exe
             portable_asset: kairo-win-x64-portable.zip
-            ffmpeg_url: https://github.com/yt-dlp/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-win64-lgpl.zip
+            ffmpeg_asset_name: ffmpeg-master-latest-win64-gpl.zip
             yt_dlp_url: https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp.exe
             deno_url: https://github.com/denoland/deno/releases/latest/download/deno-x86_64-pc-windows-msvc.zip
 
@@ -68,6 +68,28 @@ jobs:
           cp "$release_dir/${{ matrix.raw_asset }}" "$bundle_dir/kairo${{ matrix.extension }}"
           cp README.md LICENSE "$bundle_dir/"
 
+      - name: Resolve FFmpeg asset URL
+        id: ffmpeg_asset
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          asset_url="$(
+            curl -fsSL https://api.github.com/repos/yt-dlp/FFmpeg-Builds/releases/latest \
+              | jq -r --arg asset_name "${{ matrix.ffmpeg_asset_name }}" '
+                  .assets[]
+                  | select(.name == $asset_name)
+                  | .browser_download_url
+                '
+          )"
+
+          if [[ -z "$asset_url" || "$asset_url" == "null" ]]; then
+            echo "Unable to resolve FFmpeg asset '${{ matrix.ffmpeg_asset_name }}' from yt-dlp/FFmpeg-Builds." >&2
+            exit 1
+          fi
+
+          echo "url=$asset_url" >> "$GITHUB_OUTPUT"
+
       - name: Bundle portable toolchain on Linux
         if: runner.os == 'Linux'
         shell: bash
@@ -78,7 +100,7 @@ jobs:
           work_dir="artifacts/toolwork/linux"
           mkdir -p "$tool_dir" "$work_dir"
 
-          curl -L "${{ matrix.ffmpeg_url }}" -o "$work_dir/ffmpeg.tar.xz"
+          curl -L "${{ steps.ffmpeg_asset.outputs.url }}" -o "$work_dir/ffmpeg.tar.xz"
           tar -xf "$work_dir/ffmpeg.tar.xz" -C "$work_dir"
           ffmpeg_root="$(find "$work_dir" -maxdepth 1 -type d -name 'ffmpeg-*' | head -n 1)"
           cp "$ffmpeg_root/bin/ffmpeg" "$tool_dir/ffmpeg"
@@ -107,7 +129,7 @@ jobs:
           New-Item -ItemType Directory -Force -Path $toolDir | Out-Null
           New-Item -ItemType Directory -Force -Path $workDir | Out-Null
 
-          Invoke-WebRequest "${{ matrix.ffmpeg_url }}" -OutFile "$workDir/ffmpeg.zip"
+          Invoke-WebRequest "${{ steps.ffmpeg_asset.outputs.url }}" -OutFile "$workDir/ffmpeg.zip"
           Expand-Archive "$workDir/ffmpeg.zip" -DestinationPath "$workDir/ffmpeg" -Force
           $ffmpegRoot = Get-ChildItem "$workDir/ffmpeg" -Directory | Select-Object -First 1
           Copy-Item "$($ffmpegRoot.FullName)/bin/ffmpeg.exe" "$toolDir/ffmpeg.exe"
