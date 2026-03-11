@@ -44,6 +44,7 @@ The current build includes:
   - `braille`
 - diff rendering
 - FPS control and frame dropping
+- startup preroll for `--detail insane`
 - resize-aware playback strategy
 - CLI help
 - unit tests
@@ -201,6 +202,7 @@ Status notes:
 - `--mute` is kept as a compatibility shortcut for `--audio off`.
 - URL inputs are downloaded into a local cache before playback so the same file can be reused by the video and audio pipelines.
 - In `blocks` mode, `--detail quality`, `ultra`, and `insane` switch to denser 2x2 quadrant rendering.
+- `--detail insane` now preloads extra frames before playback starts and, when audio is off, will slow playback slightly instead of dropping frames as soon as the terminal falls behind.
 
 ## Default behavior
 

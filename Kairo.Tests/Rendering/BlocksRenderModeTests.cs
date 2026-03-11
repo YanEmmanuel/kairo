@@ -76,6 +76,8 @@ public sealed class BlocksRenderModeTests
             false,
             24d,
             3,
+            0,
+            false,
             null,
             " .,:;irsXA253hMHGS#9B&@",
             false,

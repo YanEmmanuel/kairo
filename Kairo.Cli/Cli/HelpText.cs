@@ -67,6 +67,7 @@ public static class HelpText
         Notes:
           The default mode is auto and prefers truecolor block rendering.
           In blocks mode, detail quality and above enable denser 2x2 quadrant cells.
+          Detail insane preloads extra frames before playback and, with audio off, prefers smooth playback over frame drops.
           Resize is tracked during playback when width or height is not fixed.
           Portable release bundles ship with ffmpeg, ffprobe, ffplay, yt-dlp, and deno.
           Raw binaries still fall back to system tools in PATH.

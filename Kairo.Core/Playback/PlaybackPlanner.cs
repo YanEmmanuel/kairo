@@ -12,6 +12,7 @@ public static class PlaybackPlanner
         var descriptor = AutoPresetSelector.ResolveDescriptor(options, mode);
         var layout = AspectRatioCalculator.Calculate(metadata, terminalSize, options, descriptor);
         var targetFps = AutoPresetSelector.ResolveTargetFps(options, metadata);
+        var bufferSize = AutoPresetSelector.ResolveBufferSize(options, options.Detail);
 
         return new ResolvedPlaybackSettings(
             mode,
@@ -22,7 +23,9 @@ public static class PlaybackPlanner
             options.ForceFullRedraw,
             options.MaxFps || options.Benchmark,
             targetFps,
-            AutoPresetSelector.ResolveBufferSize(options, options.Detail),
+            bufferSize,
+            AutoPresetSelector.ResolveStartupBufferFrames(options, options.Detail, bufferSize),
+            AutoPresetSelector.ShouldPreferSmoothPlayback(options),
             options.Threads,
             options.Charset,
             options.InvertCharset,

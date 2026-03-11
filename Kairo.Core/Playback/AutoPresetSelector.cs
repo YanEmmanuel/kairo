@@ -37,9 +37,23 @@ public static class AutoPresetSelector
             DetailLevel.Balanced => 3,
             DetailLevel.Quality => 4,
             DetailLevel.Ultra => 5,
-            DetailLevel.Insane => 6,
+            DetailLevel.Insane => 12,
             _ => 3
         };
+
+    public static int ResolveStartupBufferFrames(PlaybackOptions options, DetailLevel detail, int bufferSize)
+    {
+        if (options.PreviewFrame || options.MaxFps || options.Benchmark || bufferSize <= 1)
+        {
+            return 0;
+        }
+
+        return detail switch
+        {
+            DetailLevel.Insane => Math.Min(bufferSize, Math.Max(3, (bufferSize * 3 + 3) / 4)),
+            _ => 0
+        };
+    }
 
     public static double ResolveTargetFps(PlaybackOptions options, VideoMetadata metadata)
     {
@@ -74,6 +88,13 @@ public static class AutoPresetSelector
             DetailLevel.Insane => "lanczos",
             _ => "bilinear"
         };
+
+    public static bool ShouldPreferSmoothPlayback(PlaybackOptions options) =>
+        options.Audio == AudioMode.Off &&
+        !options.MaxFps &&
+        !options.Benchmark &&
+        !options.PreviewFrame &&
+        options.Detail == DetailLevel.Insane;
 
     public static bool ShouldTrackResize(PlaybackOptions options) =>
         !options.Width.HasValue || !options.Height.HasValue;

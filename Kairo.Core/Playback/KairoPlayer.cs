@@ -39,6 +39,7 @@ public sealed class KairoPlayer
 
         await _terminalDevice.EnterAsync(cancellationToken).ConfigureAwait(false);
         IAsyncDisposable? audioSession = null;
+        Func<CancellationToken, Task>? ensureAudioStartedAsync = null;
 
         try
         {
@@ -51,9 +52,17 @@ public sealed class KairoPlayer
 
                 if (!options.PreviewFrame)
                 {
-                    audioSession = await _audioPlayer
-                        .StartAsync(new AudioPlaybackRequest(options.PlaybackPath, options.StartAt, options.Duration, options.Loop), cancellationToken)
-                        .ConfigureAwait(false);
+                    ensureAudioStartedAsync = async token =>
+                    {
+                        if (audioSession is not null)
+                        {
+                            return;
+                        }
+
+                        audioSession = await _audioPlayer
+                            .StartAsync(new AudioPlaybackRequest(options.PlaybackPath, options.StartAt, options.Duration, options.Loop), token)
+                            .ConfigureAwait(false);
+                    };
                 }
             }
 
@@ -87,7 +96,22 @@ public sealed class KairoPlayer
                     options.Gamma,
                     stats);
 
-                var outcome = await PlaySegmentAsync(settings, request, renderMode, stats, cancellationToken).ConfigureAwait(false);
+                var startupBufferFrames = ShouldUseStartupBuffer(options, audioSession, segmentStart)
+                    ? settings.StartupBufferFrames
+                    : 0;
+                var outcome = await PlaySegmentAsync(
+                        settings,
+                        request,
+                        renderMode,
+                        stats,
+                        startupBufferFrames,
+                        ensureAudioStartedAsync,
+                        cancellationToken)
+                    .ConfigureAwait(false);
+                if (audioSession is not null)
+                {
+                    ensureAudioStartedAsync = null;
+                }
 
                 if (options.PreviewFrame)
                 {
@@ -140,6 +164,8 @@ public sealed class KairoPlayer
         FrameSourceRequest request,
         IRenderMode renderMode,
         PlaybackStats stats,
+        int startupBufferFrames,
+        Func<CancellationToken, Task>? onPlaybackStartAsync,
         CancellationToken cancellationToken)
     {
         using var current = new TerminalFrameBuffer(settings.Layout.TerminalWidth, settings.Layout.TerminalHeight);
@@ -154,68 +180,100 @@ public sealed class KairoPlayer
         });
 
         var producerTask = _frameSource.ProduceAsync(request, channel.Writer, linkedCts.Token);
-        var stopwatch = Stopwatch.StartNew();
+        var stopwatch = new Stopwatch();
         var sawFirstFrame = false;
         var lastTimestamp = TimeSpan.Zero;
         var restartRequested = false;
+        var scheduleOffset = TimeSpan.Zero;
+        var frameQueue = new Queue<VideoFrame>(Math.Max(1, settings.BufferSize));
         var frameBudget = settings.TargetFps > 0d
             ? TimeSpan.FromSeconds(1d / settings.TargetFps)
             : TimeSpan.FromMilliseconds(33);
 
         try
         {
-            await foreach (var frame in channel.Reader.ReadAllAsync(linkedCts.Token).ConfigureAwait(false))
+            var hasFrames = await FillFrameQueueAsync(
+                    channel.Reader,
+                    frameQueue,
+                    Math.Max(1, startupBufferFrames),
+                    linkedCts.Token)
+                .ConfigureAwait(false);
+
+            while (hasFrames)
             {
+                DrainAvailableFrames(channel.Reader, frameQueue, settings.BufferSize);
+                var frame = frameQueue.Dequeue();
+
                 using (frame)
                 {
                     if (!sawFirstFrame)
                     {
+                        if (onPlaybackStartAsync is not null)
+                        {
+                            await onPlaybackStartAsync(linkedCts.Token).ConfigureAwait(false);
+                        }
+
                         stopwatch.Restart();
                         sawFirstFrame = true;
                     }
 
                     lastTimestamp = frame.Timestamp;
+                    var skipRender = false;
 
                     if (!settings.MaxFps)
                     {
-                        var delay = frame.Timestamp - stopwatch.Elapsed;
+                        var delay = (frame.Timestamp + scheduleOffset) - stopwatch.Elapsed;
                         if (delay > TimeSpan.FromMilliseconds(1))
                         {
                             await Task.Delay(delay, linkedCts.Token).ConfigureAwait(false);
                         }
                         else if (-delay > frameBudget)
                         {
-                            stats.OnFrameDropped();
-                            continue;
+                            if (settings.PreferSmoothPlayback)
+                            {
+                                scheduleOffset += -delay;
+                            }
+                            else
+                            {
+                                stats.OnFrameDropped();
+                                skipRender = true;
+                            }
                         }
                     }
 
-                    var renderStarted = Stopwatch.GetTimestamp();
-                    renderMode.Render(frame, settings.Layout, current, settings);
-                    var renderDuration = Stopwatch.GetElapsedTime(renderStarted);
-
-                    var outputStarted = Stopwatch.GetTimestamp();
-                    await _terminalDevice
-                        .RenderAsync(current, previous, !settings.UseDiffRendering || settings.ForceFullRedraw, linkedCts.Token)
-                        .ConfigureAwait(false);
-                    var outputDuration = Stopwatch.GetElapsedTime(outputStarted);
-
-                    stats.OnFrameRendered(renderDuration, outputDuration);
-                    SwapBuffers(current, previous);
-
-                    if (settings.PreviewFrame)
+                    if (!skipRender)
                     {
-                        linkedCts.Cancel();
-                        break;
-                    }
+                        var renderStarted = Stopwatch.GetTimestamp();
+                        renderMode.Render(frame, settings.Layout, current, settings);
+                        var renderDuration = Stopwatch.GetElapsedTime(renderStarted);
 
-                    if (settings.TrackResize && HasTerminalResized(settings.TerminalSize))
-                    {
-                        restartRequested = true;
-                        linkedCts.Cancel();
-                        break;
+                        var outputStarted = Stopwatch.GetTimestamp();
+                        await _terminalDevice
+                            .RenderAsync(current, previous, !settings.UseDiffRendering || settings.ForceFullRedraw, linkedCts.Token)
+                            .ConfigureAwait(false);
+                        var outputDuration = Stopwatch.GetElapsedTime(outputStarted);
+
+                        stats.OnFrameRendered(renderDuration, outputDuration);
+                        SwapBuffers(current, previous);
+
+                        if (settings.PreviewFrame)
+                        {
+                            linkedCts.Cancel();
+                            break;
+                        }
+
+                        if (settings.TrackResize && HasTerminalResized(settings.TerminalSize))
+                        {
+                            restartRequested = true;
+                            linkedCts.Cancel();
+                            break;
+                        }
                     }
                 }
+
+                DrainAvailableFrames(channel.Reader, frameQueue, settings.BufferSize);
+                hasFrames = frameQueue.Count > 0 ||
+                    await FillFrameQueueAsync(channel.Reader, frameQueue, 1, linkedCts.Token).ConfigureAwait(false);
             }
 
             await producerTask.ConfigureAwait(false);
@@ -224,13 +282,52 @@ public sealed class KairoPlayer
         {
             await DrainFramesAsync(channel.Reader).ConfigureAwait(false);
         }
+        finally
+        {
+            DisposeFrames(frameQueue);
+        }
 
         return new SegmentOutcome(restartRequested, lastTimestamp);
     }
 
+    private static bool ShouldUseStartupBuffer(PlaybackOptions options, IAsyncDisposable? audioSession, TimeSpan segmentStart) =>
+        segmentStart == options.StartAt &&
+        (options.Audio == AudioMode.Off || audioSession is null);
+
     private bool HasTerminalResized(TerminalSize initial) =>
         _terminalDevice.GetCurrentSize() is var current &&
         (current.Width != initial.Width || current.Height != initial.Height);
+
+    private static void DrainAvailableFrames(ChannelReader<VideoFrame> reader, Queue<VideoFrame> queue, int maxFrames)
+    {
+        while (queue.Count < maxFrames && reader.TryRead(out var frame))
+        {
+            queue.Enqueue(frame);
+        }
+    }
+
+    private static async Task<bool> FillFrameQueueAsync(
+        ChannelReader<VideoFrame> reader,
+        Queue<VideoFrame> queue,
+        int targetCount,
+        CancellationToken cancellationToken)
+    {
+        while (queue.Count < targetCount)
+        {
+            DrainAvailableFrames(reader, queue, targetCount);
+            if (queue.Count >= targetCount)
+            {
+                return true;
+            }
+
+            if (!await reader.WaitToReadAsync(cancellationToken).ConfigureAwait(false))
+            {
+                return queue.Count > 0;
+            }
+        }
+
+        return true;
+    }
 
     private static async Task DrainFramesAsync(ChannelReader<VideoFrame> reader)
     {
@@ -240,6 +337,14 @@ public sealed class KairoPlayer
             {
                 frame.Dispose();
             }
+        }
+    }
+
+    private static void DisposeFrames(Queue<VideoFrame> queue)
+    {
+        while (queue.TryDequeue(out var frame))
+        {
+            frame.Dispose();
         }
     }
 

@@ -13,6 +13,8 @@ public sealed record ResolvedPlaybackSettings(
     bool MaxFps,
     double TargetFps,
     int BufferSize,
+    int StartupBufferFrames,
+    bool PreferSmoothPlayback,
     int? Threads,
     string Charset,
     bool InvertCharset,
